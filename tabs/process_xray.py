@@ -1,41 +1,54 @@
 import streamlit as st
+from streamlit_agraph import agraph, Node, Edge, Config
 from engine.discovery import get_proprietary_dfg
 
 def render(df):
-    st.header("🛣️ Process X-Ray: Execution Intelligence")
+    st.header("🛣️ Process X-Ray: Interactive Intelligence")
     
     with st.sidebar:
-        st.subheader("Map Fine-Tuning")
-        top_k = st.slider("Flow Complexity", 1, 50, 15)
+        top_k = st.slider("Flow Complexity", 1, 50, 20)
 
-    # 1. Get the Flow Data
+    # 1. Get Flow Data
     edges_df = get_proprietary_dfg(df)
-    
-    if not edges_df.empty:
-        # Sort by most frequent paths
-        plot_df = edges_df.sort_values("frequency", ascending=False).head(top_k)
+    if edges_df.empty:
+        st.warning("No data found.")
+        return
 
-        # 2. Build a clear DOT Graph (Left-to-Right Flow)
-        dot = "digraph {\n"
-        dot += '  rankdir=LR; node [shape=rect, style="rounded,filled", fillcolor="#E1F5FE", fontname="Arial"];\n'
-        
-        for _, row in plot_df.iterrows():
-            source = str(row['activity_name'])
-            target = str(row['next_activity'])
-            freq = int(row['frequency'])
-            
-            # --- IMPROVED SCALING LOGIC ---
-            # This caps the thickness at 5 and ensures it doesn't get "disgusting"
-            scaled_width = min(5, max(1, freq / 100)) 
-            
-            # Add the connection with a thinner, cleaner arrow
-            dot += f'  "{source}" -> "{target}" [label="{freq}", penwidth={scaled_width}, color="#444444", fontname="Arial"];\n'
-        
-        dot += "}"
+    plot_df = edges_df.sort_values("frequency", ascending=False).head(top_k)
 
-        # 3. Render the Process Map
-        st.subheader("Enterprise Process Flow")
-        st.graphviz_chart(dot)
-        
-    else:
-        st.warning("⚠️ The Engine could not find any process connections. Check your data columns.")
+    # 2. Create Nodes
+    unique_activities = df['activity_name'].unique()
+    nodes = [
+        Node(id=act, 
+             label=act, 
+             size=25, 
+             shape="circularDot",
+             color="#1f77b4") 
+        for act in unique_activities
+    ]
+
+    # 3. Create Edges
+    edges = [
+        Edge(source=row['activity_name'], 
+             target=row['next_activity'], 
+             label=f"{int(row['frequency'])}") 
+        for _, row in plot_df.iterrows()
+    ]
+
+    # 4. Configuration for Focus/Blur effect
+    config = Config(
+        width=1000,
+        height=600,
+        directed=True,
+        physics=True,
+        hierarchical=False,
+        # This setting handles the "blur others" logic
+        highlightDegree=1, 
+        collapsible=False,
+        nodeHighlightBehavior=True,
+        linkHighlightBehavior=True,
+        highlightColor="#F7A01B" # Color when focused
+    )
+
+    # 5. Render
+    agraph(nodes=nodes, edges=edges, config=config)
