@@ -6,3 +6,4 @@ plotly
 pyarrow  # Required for Parquet files
 st-link-analysis
 streamlit-agraph
+pyvis
