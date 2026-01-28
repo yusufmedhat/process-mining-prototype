@@ -1,14 +1,15 @@
 import streamlit as st
-from st_link_analysis import st_link_analysis
+import streamlit.components.v1 as components
+from pyvis.network import Network
 from engine.discovery import get_proprietary_dfg
+import os
 
 def render(df):
     st.header("🛣️ Process X-Ray: Execution Intelligence")
     
     with st.sidebar:
-        top_k = st.slider("Flow Complexity", 1, 50, 10)
+        top_k = st.slider("Flow Complexity", 1, 50, 12)
 
-    # 1. Get and Clean Data
     edges_df = get_proprietary_dfg(df)
     if edges_df.empty:
         st.warning("No data found.")
@@ -16,82 +17,60 @@ def render(df):
 
     plot_df = edges_df.sort_values("frequency", ascending=False).head(top_k)
 
-    # 2. Build Elements - Simplified for stability
-    # We remove complex style dicts inside the list to prevent rendering errors
-    nodes = [
-        {"data": {"id": str(act), "label": str(act)}}
-        for act in df['activity_name'].unique()
-    ]
+    # 1. Initialize PyVis Network
+    # 'directed=True' and high 'height' for visibility
+    net = Network(height="500px", width="100%", directed=True, bgcolor="#ffffff", font_color="#000000")
 
-    edges = [
-        {
-            "data": {
-                "id": f"{row['activity_name']}_{row['next_activity']}",
-                "source": str(row['activity_name']), 
-                "target": str(row['next_activity']), 
-                "label": f"{int(row['frequency'])}"
-            }
-        }
-        for _, row in plot_df.iterrows()
-    ]
-
-    # 3. Global Styles: White boxes, Black borders, Directed arrows
-    styles = [
-        {
-            "selector": "node",
-            "style": {
-                "shape": "rectangle",
-                "background-color": "#FFFFFF",
-                "border-width": 1,
-                "border-color": "#000000",
-                "label": "data(label)",
-                "width": 140,
-                "height": 40,
-                "text-valign": "center",
-                "text-halign": "center",
-                "font-size": "12px",
-                "color": "#000000"
-            }
-        },
-        {
-            "selector": "edge",
-            "style": {
-                "width": 1,
-                "line-color": "#999999",
-                "target-arrow-color": "#999999",
-                "target-arrow-shape": "triangle",
-                "curve-style": "bezier",
-                "label": "data(label)",
-                "font-size": "10px",
-                "text-rotation": "autorotate"
-            }
-        },
-        {
-            # This handles the "Blur" effect by dimming everything else on hover
-            "selector": "node:selected",
-            "style": {
-                "border-color": "#F7A01B",
-                "border-width": 3
-            }
-        }
-    ]
-
-    # 4. The Layout: Forced Horizontal Pipeline
-    layout = {
-        "name": "dagre",
-        "rankDir": "LR",  # Left to Right
-        "nodeSep": 50,
-        "rankSep": 200,
-        "animate": False
-    }
-
-    # 5. Render
-    try:
-        st_link_analysis(
-            elements={"nodes": nodes, "edges": edges},
-            layout=layout,
-            styling=styles,
-            key="final_process_map"
+    # 2. Add Nodes: White rectangles with black borders
+    unique_activities = df['activity_name'].unique()
+    for act in unique_activities:
+        net.add_node(
+            act, 
+            label=act, 
+            shape="box", 
+            color={"background": "#FFFFFF", "border": "#000000"},
+            borderWidth=1,
+            font={"size": 14}
         )
-    except Exception:
-        st.error("Component failed to render. Please check connectivity.")
+
+    # 3. Add Edges: Uniform width, describe order
+    for _, row in plot_df.iterrows():
+        net.add_edge(
+            row['activity_name'], 
+            row['next_activity'], 
+            label=str(int(row['frequency'])),
+            color="#999999",
+            width=1
+        )
+
+    # 4. Force Horizontal Hierarchical Layout
+    # This dictionary forces the "Serial" look (Left-to-Right)
+    options = {
+        "layout": {
+            "hierarchical": {
+                "enabled": True,
+                "levelSeparation": 250,
+                "nodeSpacing": 150,
+                "direction": "LR",  # Left to Right
+                "sortMethod": "directed"
+            }
+        },
+        "interaction": {
+            "hover": True,
+            "navigationButtons": True,
+            "tooltipDelay": 100
+        },
+        "physics": {"enabled": False} # Prevents jitter and refresh
+    }
+    net.set_options(f"""var options = {str(options)}""")
+
+    # 5. Save and Render
+    # We save to a temporary HTML file and display it in Streamlit
+    try:
+        path = "tmp_graph.html"
+        net.save_graph(path)
+        with open(path, 'r', encoding='utf-8') as f:
+            html_data = f.read()
+        components.html(html_data, height=550)
+    except Exception as e:
+        st.error(f"Error generating graph: {e}")
