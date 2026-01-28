@@ -7,59 +7,56 @@ def render(df):
     
     with st.sidebar:
         st.subheader("Map Controls")
-        top_k = st.slider("Flow Complexity", 1, 50, 15)
+        # Keep complexity low to ensure a clean horizontal line
+        top_k = st.slider("Flow Complexity", 1, 50, 12)
 
+    # 1. Get Flow Data
     edges_df = get_proprietary_dfg(df)
     if edges_df.empty:
         st.warning("No data found.")
         return
 
+    # Sort by frequency to ensure the "main" path is prioritized in the layout
     plot_df = edges_df.sort_values("frequency", ascending=False).head(top_k)
 
-    # 1. Clean Nodes: White background, thin black border
+    # 2. Nodes: White background, thin black borders, horizontal alignment
     unique_activities = df['activity_name'].unique()
     nodes = []
     for act in unique_activities:
         nodes.append(Node(
-            id=act,
-            label=act,
+            id=act, 
+            label=act, 
             shape="box",
-            size=20,
-            color="#FFFFFF", # White background
-            borderWidth=1,
-            labelHighlightBold=True
+            color="#FFFFFF",
+            font={'color': '#000000', 'size': 14},
+            borderWidth=1
         ))
 
-    # 2. Clean Edges: Light grey lines
+    # 3. Edges: Uniform width, describing the order
     edges = []
     for _, row in plot_df.iterrows():
         edges.append(Edge(
-            source=row['activity_name'],
-            target=row['next_activity'],
-            label=str(int(row['frequency'])),
-            color="#CCCCCC", # Light grey noise reduction
-            width=1
+            source=row['activity_name'], 
+            target=row['next_activity'], 
+            label=f" {int(row['frequency'])} ",
+            color="#999999",
+            width=1, # Uniform width as requested
+            arrowStrikethrough=False
         ))
 
-    # 3. Stable Configuration: Disabling physics prevents the click/zoom refresh
+    # 4. Hierarchical Config: Forces the "Serial" horizontal plane
     config = Config(
-        width=1000,
-        height=600,
+        width=1200,
+        height=400,
         directed=True,
+        physics=False, # STOP REFRESH: Locked positions
+        hierarchical=True, # Forces order
+        direction="LR", # Left to Right horizontal plane
         nodeHighlightBehavior=True,
-        highlightColor="#F7A01B",
-        # Disabling physics stops the jitter and reruns
-        physics=False,
-        hierarchical=False,
-        collapsible=False
+        highlightDegree=1,
+        linkHighlightBehavior=True,
+        staticGraph=False
     )
 
-    # 4. Render with Error Handling
-    try:
-        agraph(nodes=nodes, 
-               edges=edges, 
-               config=config)
-    except Exception as e:
-        st.error("Visualization error. Falling back to static map.")
-        # Fallback if agraph fails again
-        st.write("Current Edge Data:", plot_df)
+    # 5. Render with fixed key to prevent state loss/refresh on zoom
+    agraph(nodes=nodes, edges=edges, config=config, key="serial_process_map")
