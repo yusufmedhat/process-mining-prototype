@@ -1,72 +1,42 @@
 import streamlit as st
 import pandas as pd
-import pm4py
-import plotly.express as px
 import os
+# Importing our custom modules from the /tabs folder
+from tabs import process_xray, social_mining, case_explorer
 
 st.set_page_config(layout="wide", page_title="Nestlé Process Excellence Hub")
 
-st.title("🛡️ Nestlé Process Excellence Hub")
-st.caption("Celonis-Grade Analytics | Interactive Digital Twin")
+# Shared Data Loading with Caching for Speed
+@st.cache_data
+def load_data():
+    path = "data/Insurance_claims_event_log.csv"
+    if os.path.exists(path):
+        df = pd.read_csv(path)
+        df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+        return df
+    return None
 
-DATA_PATH = "data/Insurance_claims_event_log.csv"
+df = load_data()
 
-if os.path.exists(DATA_PATH):
-    df = pd.read_csv(DATA_PATH)
-    df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+if df is not None:
+    st.sidebar.title("🛡️ Nestlé Hub")
+    st.sidebar.info("Celonis-Grade Digital Twin")
     
-    # Define Keys
-    case_col, act_col, time_col = 'case_id', 'activity_name', 'timestamp'
+    # Navigation Menu
+    choice = st.sidebar.radio(
+        "Analysis Level", 
+        ["🛣️ Process X-Ray", "👥 Social Mining", "🔍 Case Explorer"]
+    )
+    
+    st.sidebar.markdown("---")
+    st.sidebar.caption("Data Source: Insurance_claims_event_log.csv")
 
-    # --- SIDEBAR: CELONIS CONTROLS ---
-    st.sidebar.header("🕹️ Control Tower")
-    top_k = st.sidebar.slider("Process Path Coverage (Top Variants)", 1, 100, 20)
-    view_type = st.sidebar.radio("Map Metric:", ["Frequency (Volume)", "Performance (Duration)"])
-
-    # --- KPI TILES ---
-    total_cases = df[case_col].nunique()
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Cases", f"{total_cases:,}")
-    col2.metric("Avg Claim", f"${df['claim_amount'].mean():,.0f}")
-    col3.metric("Standardization", f"{(top_k/100)*100:.0f}%", "Target: 80%")
-
-    # --- MAIN TABS ---
-    tab1, tab2, tab3 = st.tabs(["🛣️ Process X-Ray", "👥 Social Mining", "🔍 Case Audit"])
-
-    with tab1:
-        st.subheader(f"Dynamic {view_type} Map")
-        
-        # 1. Filter variants
-        filtered_log = pm4py.filter_variants_top_k(df, top_k, case_id_key=case_col, activity_key=act_col, timestamp_key=time_col)
-        
-        # 2. Setup Parameters to prevent KeyErrors
-        # This tells pm4py exactly which columns to use for visualization
-        params = {
-            "case_id_key": case_col,
-            "activity_key": act_col,
-            "timestamp_key": time_col
-        }
-
-        if view_type == "Frequency (Volume)":
-            dfg, start_act, end_act = pm4py.discover_dfg(filtered_log, case_id_key=case_col, activity_key=act_col, timestamp_key=time_col)
-            gviz = pm4py.visualization.dfg.visualizer.apply(dfg, log=filtered_log, variant=pm4py.visualization.dfg.visualizer.Variants.FREQUENCY, parameters=params)
-        else:
-            dfg_perf = pm4py.discover_performance_dfg(filtered_log, case_id_key=case_col, activity_key=act_col, timestamp_key=time_col)
-            gviz = pm4py.visualization.dfg.visualizer.apply(dfg_perf, log=filtered_log, variant=pm4py.visualization.dfg.visualizer.Variants.PERFORMANCE, parameters=params)
-        
-        st.graphviz_chart(gviz)
-        st.caption(f"🔍 Currently showing the top {top_k} process variants.")
-
-    with tab2:
-        st.subheader("Agent Productivity")
-        agent_stats = df.groupby('agent_name').agg({case_col: 'nunique', 'claim_amount': 'sum'}).reset_index()
-        fig = px.scatter(agent_stats, x=case_col, y='claim_amount', text='agent_name', size='claim_amount', color=case_col)
-        st.plotly_chart(fig, use_container_width=True)
-
-    with tab3:
-        st.subheader("Case Explorer")
-        search_case = st.selectbox("Search Case ID:", df[case_col].unique()[:20])
-        st.dataframe(df[df[case_col] == search_case].sort_values(time_col), use_container_width=True)
-
+    # Route to the correct file
+    if choice == "🛣️ Process X-Ray":
+        process_xray.render(df)
+    elif choice == "👥 Social Mining":
+        social_mining.render(df)
+    elif choice == "🔍 Case Explorer":
+        case_explorer.render(df)
 else:
-    st.error("Missing CSV. Check your /data folder.")
+    st.error("❌ CSV Data not found. Please ensure the file is in the /data folder.")
