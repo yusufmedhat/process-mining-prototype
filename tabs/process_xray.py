@@ -6,57 +6,58 @@ def render(df):
     st.header("🛣️ Process X-Ray: Execution Intelligence")
     
     with st.sidebar:
-        st.subheader("Map Controls")
-        # Keep complexity low to ensure a clean horizontal line
         top_k = st.slider("Flow Complexity", 1, 50, 12)
 
-    # 1. Get Flow Data
     edges_df = get_proprietary_dfg(df)
     if edges_df.empty:
         st.warning("No data found.")
         return
 
-    # Sort by frequency to ensure the "main" path is prioritized in the layout
     plot_df = edges_df.sort_values("frequency", ascending=False).head(top_k)
 
-    # 2. Nodes: White background, thin black borders, horizontal alignment
-    unique_activities = df['activity_name'].unique()
+    # 1. CLEAN NODES: White, Black Border, Rectangles
     nodes = []
-    for act in unique_activities:
+    for act in df['activity_name'].unique():
         nodes.append(Node(
             id=act, 
             label=act, 
             shape="box",
-            color="#FFFFFF",
-            font={'color': '#000000', 'size': 14},
-            borderWidth=1
+            color="#FFFFFF", # White background
+            borderWidth=1,   # Thin black border (default is black)
+            font={'color': '#000000'}
         ))
 
-    # 3. Edges: Uniform width, describing the order
+    # 2. CLEAN EDGES: Uniform width, grey color
     edges = []
     for _, row in plot_df.iterrows():
         edges.append(Edge(
             source=row['activity_name'], 
             target=row['next_activity'], 
-            label=f" {int(row['frequency'])} ",
+            label=str(int(row['frequency'])),
             color="#999999",
-            width=1, # Uniform width as requested
-            arrowStrikethrough=False
+            width=1
         ))
 
-    # 4. Hierarchical Config: Forces the "Serial" horizontal plane
+    # 3. STABLE HIERARCHICAL CONFIG
+    # We remove 'staticGraph' and 'physics' conflicts to stop the TypeError
     config = Config(
-        width=1200,
+        width=1000,
         height=400,
         directed=True,
-        physics=False, # STOP REFRESH: Locked positions
-        hierarchical=True, # Forces order
-        direction="LR", # Left to Right horizontal plane
+        hierarchical=True,
+        direction="LR",      # Left to Right
         nodeHighlightBehavior=True,
         highlightDegree=1,
         linkHighlightBehavior=True,
-        staticGraph=False
+        highlightColor="#F7A01B",
+        physics=False        # Essential to stop the zoom-refresh loop
     )
 
-    # 5. Render with fixed key to prevent state loss/refresh on zoom
-    agraph(nodes=nodes, edges=edges, config=config, key="serial_process_map")
+    # 4. RENDER
+    # If the key "serial_process_map" still causes a TypeError, 
+    # remove it and let Streamlit handle the ID automatically.
+    try:
+        agraph(nodes=nodes, edges=edges, config=config)
+    except Exception as e:
+        st.error("Visualization Component Error. Checking data types...")
+        st.write("Ensuring all IDs are strings:", [type(n.id) for n in nodes])
