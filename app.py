@@ -15,16 +15,12 @@ if os.path.exists(DATA_PATH):
     df = pd.read_csv(DATA_PATH)
     df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
     
-    # Mapping
+    # Define Keys
     case_col, act_col, time_col = 'case_id', 'activity_name', 'timestamp'
 
     # --- SIDEBAR: CELONIS CONTROLS ---
     st.sidebar.header("🕹️ Control Tower")
-    
-    # Path Filtering: This is how we simplify the "Spaghetti"
-    # We filter by the Top K most frequent variants
     top_k = st.sidebar.slider("Process Path Coverage (Top Variants)", 1, 100, 20)
-    
     view_type = st.sidebar.radio("Map Metric:", ["Frequency (Volume)", "Performance (Duration)"])
 
     # --- KPI TILES ---
@@ -40,25 +36,31 @@ if os.path.exists(DATA_PATH):
     with tab1:
         st.subheader(f"Dynamic {view_type} Map")
         
-        # STABLE FILTERING: Filter to the Top K variants to simplify the map
+        # 1. Filter variants
         filtered_log = pm4py.filter_variants_top_k(df, top_k, case_id_key=case_col, activity_key=act_col, timestamp_key=time_col)
         
+        # 2. Setup Parameters to prevent KeyErrors
+        # This tells pm4py exactly which columns to use for visualization
+        params = {
+            "case_id_key": case_col,
+            "activity_key": act_col,
+            "timestamp_key": time_col
+        }
+
         if view_type == "Frequency (Volume)":
             dfg, start_act, end_act = pm4py.discover_dfg(filtered_log, case_id_key=case_col, activity_key=act_col, timestamp_key=time_col)
-            gviz = pm4py.visualization.dfg.visualizer.apply(dfg, log=filtered_log, variant=pm4py.visualization.dfg.visualizer.Variants.FREQUENCY)
+            gviz = pm4py.visualization.dfg.visualizer.apply(dfg, log=filtered_log, variant=pm4py.visualization.dfg.visualizer.Variants.FREQUENCY, parameters=params)
         else:
             dfg_perf = pm4py.discover_performance_dfg(filtered_log, case_id_key=case_col, activity_key=act_col, timestamp_key=time_col)
-            gviz = pm4py.visualization.dfg.visualizer.apply(dfg_perf, log=filtered_log, variant=pm4py.visualization.dfg.visualizer.Variants.PERFORMANCE)
+            gviz = pm4py.visualization.dfg.visualizer.apply(dfg_perf, log=filtered_log, variant=pm4py.visualization.dfg.visualizer.Variants.PERFORMANCE, parameters=params)
         
-        # Interactive SVG Rendering
         st.graphviz_chart(gviz)
-        st.caption(f"🔍 Currently showing the top {top_k} process variants. Increase the slider to see more exceptions.")
+        st.caption(f"🔍 Currently showing the top {top_k} process variants.")
 
     with tab2:
         st.subheader("Agent Productivity")
         agent_stats = df.groupby('agent_name').agg({case_col: 'nunique', 'claim_amount': 'sum'}).reset_index()
-        fig = px.scatter(agent_stats, x=case_col, y='claim_amount', text='agent_name', size='claim_amount', color=case_col,
-                         labels={case_col: "Number of Claims", "claim_amount": "Total Portfolio Value ($)"})
+        fig = px.scatter(agent_stats, x=case_col, y='claim_amount', text='agent_name', size='claim_amount', color=case_col)
         st.plotly_chart(fig, use_container_width=True)
 
     with tab3:
