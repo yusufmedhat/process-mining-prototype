@@ -6,7 +6,8 @@ def render(df):
     st.header("🛣️ Process X-Ray: Execution Intelligence")
     
     with st.sidebar:
-        top_k = st.slider("Flow Complexity", 1, 50, 12)
+        st.subheader("Map Controls")
+        top_k = st.slider("Flow Complexity", 1, 50, 15)
 
     edges_df = get_proprietary_dfg(df)
     if edges_df.empty:
@@ -15,19 +16,19 @@ def render(df):
 
     plot_df = edges_df.sort_values("frequency", ascending=False).head(top_k)
 
-    # 1. CLEAN NODES: White, Black Border, Rectangles
+    # 1. Professional Nodes
     nodes = []
     for act in df['activity_name'].unique():
         nodes.append(Node(
             id=act, 
             label=act, 
             shape="box",
-            color="#FFFFFF", # White background
-            borderWidth=1,   # Thin black border (default is black)
-            font={'color': '#000000'}
+            color="#FFFFFF",
+            font={'color': '#000000', 'size': 12},
+            borderWidth=1
         ))
 
-    # 2. CLEAN EDGES: Uniform width, grey color
+    # 2. Curved Edges for Readability
     edges = []
     for _, row in plot_df.iterrows():
         edges.append(Edge(
@@ -35,29 +36,33 @@ def render(df):
             target=row['next_activity'], 
             label=str(int(row['frequency'])),
             color="#999999",
-            width=1
+            width=1,
+            # This makes the lines curve around each other
+            type="CURVED_SMOOTH" 
         ))
 
-    # 3. STABLE HIERARCHICAL CONFIG
-    # We remove 'staticGraph' and 'physics' conflicts to stop the TypeError
+    # 3. Spaced-Out Config (Non-Hierarchical)
     config = Config(
-        width=1000,
-        height=400,
+        width=1200,   # Increased width
+        height=800,   # Increased height for better vertical spread
         directed=True,
-        hierarchical=True,
-        direction="LR",      # Left to Right
         nodeHighlightBehavior=True,
-        highlightDegree=1,
-        linkHighlightBehavior=True,
         highlightColor="#F7A01B",
-        physics=False        # Essential to stop the zoom-refresh loop
+        # Switching physics to BarnesHut to force nodes to spread out
+        physics=True, 
+        solver="barnesHut",
+        barnesHut={
+            "gravitationalConstant": -3000, # Stronger "push" to prevent overlapping
+            "centralGravity": 0.3,
+            "springLength": 200,            # Longer connections for readability
+            "springConstant": 0.05
+        },
+        # Disables the "dancing" after it finds its spot
+        stabilization=True 
     )
 
-    # 4. RENDER
-    # If the key "serial_process_map" still causes a TypeError, 
-    # remove it and let Streamlit handle the ID automatically.
     try:
+        agraph(nodes=nodes, edges=edges, config=config, key="spaced_process_map")
+    except Exception:
+        # Fallback to simple render if keys conflict
         agraph(nodes=nodes, edges=edges, config=config)
-    except Exception as e:
-        st.error("Visualization Component Error. Checking data types...")
-        st.write("Ensuring all IDs are strings:", [type(n.id) for n in nodes])
