@@ -20,59 +20,65 @@ def render(df):
     # 1. Initialize Network
     net = Network(height="500px", width="100%", directed=True, bgcolor="#ffffff")
 
-    # 2. Add Nodes: White Rectangles
+    # 2. Add Nodes: Professional White/Black styling
     for act in df['activity_name'].unique():
         net.add_node(
             act, 
             label=act, 
             shape="box", 
-            color={"background": "#FFFFFF", "border": "#000000", "highlight": "#F7A01B"},
-            font={"color": "#000000", "size": 14}
+            color={
+                "background": "#FFFFFF", 
+                "border": "#000000", 
+                # Highlight turns border thicker black instead of orange
+                "highlight": {"background": "#FFFFFF", "border": "#000000"},
+                "hover": {"background": "#F0F2F6", "border": "#000000"}
+            },
+            font={"color": "#000000", "size": 14, "face": "Arial"},
+            borderWidth=1
         )
 
-    # 3. Add Edges: Uniform Gray
+    # 3. Add Edges
     for _, row in plot_df.iterrows():
         net.add_edge(
             str(row['activity_name']), 
             str(row['next_activity']), 
             label=str(int(row['frequency'])),
             color="#999999",
-            width=1
+            width=1,
+            font={"size": 10, "align": "top"}
         )
 
-    # 4. JSON-Safe Configuration
-    # This forces the horizontal plane and enables the "focus" behavior
+    # 4. JSON-Safe Configuration: Tightened and Cleaned
     options = {
         "layout": {
             "hierarchical": {
                 "enabled": True,
-                "levelSeparation": 300,
-                "nodeSpacing": 150,
+                "levelSeparation": 150, # Reduced from 300 to bring nodes closer
+                "nodeSpacing": 100,     # Reduced from 150
                 "direction": "LR",
                 "sortMethod": "directed"
             }
         },
         "interaction": {
             "hover": True,
-            "multiselect": True,
-            "navigationButtons": True
+            "multiselect": False,
+            "navigationButtons": False, # Removed the green buttons
+            "tooltipDelay": 100
         },
-        "nodes": {
-            "borderWidth": 1,
-            "borderWidthSelected": 2
+        "edges": {
+            "smooth": {"type": "cubicBezier", "forceDirection": "horizontal"},
+            "color": {"inherit": False}
         },
         "physics": {"enabled": False}
     }
     
-    # Use json.dumps to ensure JS-compatible double quotes
     net.set_options(json.dumps(options))
 
-    # 5. Save and inject custom "Blur" CSS
+    # 5. Save and Render
     path = "tmp_graph.html"
     net.save_graph(path)
     
     with open(path, 'r', encoding='utf-8') as f:
         html_data = f.read()
     
-    # Optional: Display in Streamlit
     components.html(html_data, height=550)
