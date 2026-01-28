@@ -39,13 +39,25 @@ if os.path.exists(DATA_PATH):
         st.subheader("Interactive Process Discovery")
         view_type = st.radio("Map Metric:", ["Frequency (Volume)", "Performance (Duration)"], horizontal=True)
         
-        # 1. Discover the graph
+        # 1. Discover and Generate the Graphviz Object
         if view_type == "Frequency (Volume)":
-            # Frequency DFG
-            dfg, start_act, end_act = pm4py.discover_dfg(df, case_id_key=case_col, activity_key=act_col, timestamp_key=time_col)
-            # Convert to Graphviz object
-            gviz = pm4py.visualization.dfg.visualizer.apply(dfg, resource_id_key=None, parameters={
-                pm4py.visualization.dfg.visualizer.Variants.PERFORMANCE.value.Parameters.FORMAT: "dot"
+            # Frequency View
+            dfg, start_act, end_act = pm4py.discover_dfg(filtered_df, case_id_key=case_col, activity_key=act_col, timestamp_key=time_col)
+            gviz = pm4py.visualization.dfg.visualizer.apply(dfg, log=filtered_df, variant=pm4py.visualization.dfg.visualizer.Variants.FREQUENCY, parameters={
+                "start_activities": start_act, "end_activities": end_act
+            })
+        else:
+            # Performance View (The X-Ray)
+            dfg_perf = pm4py.discover_performance_dfg(filtered_df, case_id_key=case_col, activity_key=act_col, timestamp_key=time_col)
+            gviz = pm4py.visualization.dfg.visualizer.apply(dfg_perf, log=filtered_df, variant=pm4py.visualization.dfg.visualizer.Variants.PERFORMANCE, parameters={
+                "start_activities": list(start_act.keys()) if isinstance(start_act, dict) else start_act, 
+                "end_activities": list(end_act.keys()) if isinstance(end_act, dict) else end_act
+            })
+        
+        # 2. Render as Interactive SVG
+        # This replaces st.image() with a zoomable, sharp vector graph
+        st.graphviz_chart(gviz)
+        st.caption("🔍 Dynamic View: You can now zoom and pan. Thicker paths represent higher traffic or longer delays.")
             })
         else:
             # Performance DFG
