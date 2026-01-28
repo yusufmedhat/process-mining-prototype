@@ -1,8 +1,6 @@
 import streamlit as st
-import streamlit.components.v1 as components
-from pyvis.network import Network
+from streamlit_agraph import agraph, Node, Edge, Config
 from engine.discovery import get_proprietary_dfg
-import json
 
 def render(df):
     st.header("🛣️ Process X-Ray: Execution Intelligence")
@@ -17,68 +15,49 @@ def render(df):
 
     plot_df = edges_df.sort_values("frequency", ascending=False).head(top_k)
 
-    # 1. Initialize Network
-    net = Network(height="500px", width="100%", directed=True, bgcolor="#ffffff")
-
-    # 2. Add Nodes: Professional White/Black styling
+    # 1. CLEAN NODES: White, Black Border, Rectangles
+    nodes = []
     for act in df['activity_name'].unique():
-        net.add_node(
-            act, 
+        nodes.append(Node(
+            id=act, 
             label=act, 
-            shape="box", 
-            color={
-                "background": "#FFFFFF", 
-                "border": "#000000", 
-                # Highlight turns border thicker black instead of orange
-                "highlight": {"background": "#FFFFFF", "border": "#000000"},
-                "hover": {"background": "#F0F2F6", "border": "#000000"}
-            },
-            font={"color": "#000000", "size": 14, "face": "Arial"},
-            borderWidth=1
-        )
+            shape="box",
+            color="#FFFFFF", # White background
+            borderWidth=1,   # Thin black border (default is black)
+            font={'color': '#000000'}
+        ))
 
-    # 3. Add Edges
+    # 2. CLEAN EDGES: Uniform width, grey color
+    edges = []
     for _, row in plot_df.iterrows():
-        net.add_edge(
-            str(row['activity_name']), 
-            str(row['next_activity']), 
+        edges.append(Edge(
+            source=row['activity_name'], 
+            target=row['next_activity'], 
             label=str(int(row['frequency'])),
             color="#999999",
-            width=1,
-            font={"size": 10, "align": "top"}
-        )
+            width=1
+        ))
 
-    # 4. JSON-Safe Configuration: Tightened and Cleaned
-    options = {
-        "layout": {
-            "hierarchical": {
-                "enabled": True,
-                "levelSeparation": 150, # Reduced from 300 to bring nodes closer
-                "nodeSpacing": 100,     # Reduced from 150
-                "direction": "LR",
-                "sortMethod": "directed"
-            }
-        },
-        "interaction": {
-            "hover": True,
-            "multiselect": False,
-            "navigationButtons": False, # Removed the green buttons
-            "tooltipDelay": 100
-        },
-        "edges": {
-            "smooth": {"type": "cubicBezier", "forceDirection": "horizontal"},
-            "color": {"inherit": False}
-        },
-        "physics": {"enabled": False}
-    }
-    
-    net.set_options(json.dumps(options))
+    # 3. STABLE HIERARCHICAL CONFIG
+    # We remove 'staticGraph' and 'physics' conflicts to stop the TypeError
+    config = Config(
+        width=1000,
+        height=400,
+        directed=True,
+        hierarchical=True,
+        direction="LR",      # Left to Right
+        nodeHighlightBehavior=True,
+        highlightDegree=1,
+        linkHighlightBehavior=True,
+        highlightColor="#F7A01B",
+        physics=False        # Essential to stop the zoom-refresh loop
+    )
 
-    # 5. Save and Render
-    path = "tmp_graph.html"
-    net.save_graph(path)
-    
-    with open(path, 'r', encoding='utf-8') as f:
-        html_data = f.read()
-    
-    components.html(html_data, height=550)
+    # 4. RENDER
+    # If the key "serial_process_map" still causes a TypeError, 
+    # remove it and let Streamlit handle the ID automatically.
+    try:
+        agraph(nodes=nodes, edges=edges, config=config)
+    except Exception as e:
+        st.error("Visualization Component Error. Checking data types...")
+        st.write("Ensuring all IDs are strings:", [type(n.id) for n in nodes])
