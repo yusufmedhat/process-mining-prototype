@@ -6,16 +6,8 @@ import os
 
 st.set_page_config(layout="wide", page_title="Nestlé Process Excellence Hub")
 
-# --- CUSTOM CSS FOR CELONIS LOOK ---
-st.markdown("""
-    <style>
-    .main { background-color: #f5f7f9; }
-    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-    </style>
-    """, unsafe_allow_html=True)
-
 st.title("🛡️ Nestlé Process Excellence Hub")
-st.caption("Powered by Advanced Process Mining | Competition: Celonis-Grade Analytics")
+st.caption("Celonis-Grade Analytics | Performance & Social Mining")
 
 DATA_PATH = "data/Insurance_claims_event_log.csv"
 
@@ -23,56 +15,60 @@ if os.path.exists(DATA_PATH):
     df = pd.read_csv(DATA_PATH)
     df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
     
-    # Mapping
+    # Core Column Mapping
     case_col, act_col, time_col = 'case_id', 'activity_name', 'timestamp'
 
-    # --- SIDEBAR: THE CONTROL TOWER ---
-    st.sidebar.header("🕹️ Control Tower")
-    view_mode = st.sidebar.select_slider("Analysis Depth", options=["Standard", "Performance", "Rework Analysis"])
-    
-    st.sidebar.markdown("---")
-    # Cost Parameter (The 'Celonis' move: linking process to dollars)
-    hourly_rate = st.sidebar.number_input("Avg. Labor Cost/Hour ($)", value=50)
-
-    # --- CALCULATE ADVANCED METRICS ---
-    # 1. Rework Ratio (Cases where an activity repeats)
-    activity_counts = df.groupby([case_col, act_col]).size().reset_index(name='counts')
-    rework_cases = activity_counts[activity_counts['counts'] > 1][case_col].nunique()
-    rework_perc = (rework_cases / df[case_col].nunique()) * 100
+    # --- KPI CALCULATIONS ---
+    # Rework: Count how many times an activity is repeated within the same case
+    rework_df = df.groupby([case_col, act_col]).size().reset_index(name='occ')
+    rework_cases = rework_df[rework_df['occ'] > 1][case_col].nunique()
+    total_cases = df[case_col].nunique()
+    rework_rate = (rework_cases / total_cases) * 100
 
     # --- TOP KPI TILES ---
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Process Conformance", "72%", "+2.3%")
-    col2.metric("Rework Rate", f"{rework_perc:.1f}%", "-1.2%", delta_color="inverse")
-    col3.metric("Automation Rate", "45%", "Target: 60%")
-    col4.metric("Potential Savings", f"${(rework_cases * 2 * hourly_rate):,.0f}")
+    col1.metric("Total Cases", f"{total_cases:,}")
+    col2.metric("Rework Rate", f"{rework_rate:.1f}%", "-1.2%", delta_color="inverse")
+    col3.metric("Avg Claim", f"${df['claim_amount'].mean():,.0f}")
+    col4.metric("Automation Rate", "42%", "Target: 60%")
 
-    # --- MAIN ANALYSIS TABS ---
-    tab1, tab2, tab3 = st.tabs(["🛣️ Process Discovery", "💰 Value Discovery", "🔍 Case Explorer"])
+    # --- TABS: THE CELONIS REVERSE ENGINEER ---
+    tab1, tab2, tab3 = st.tabs(["🛣️ Process X-Ray", "👥 Social Mining", "🔍 Case Audit"])
 
     with tab1:
-        st.subheader("Directly Follows Graph")
-        if "Performance" in view_mode:
-            gviz = pm4py.discover_performance_dfg(df, case_id_key=case_col, activity_key=act_col, timestamp_key=time_col)
-            pm4py.save_vis_performance_dfg(gviz, "map.png")
+        view_type = st.radio("Map Metric:", ["Frequency (Volume)", "Performance (Duration)"], horizontal=True)
+        
+        # FIX: Getting DFG, Start, and End activities properly for both modes
+        dfg, start_act, end_act = pm4py.discover_dfg(df, case_id_key=case_col, activity_key=act_col, timestamp_key=time_col)
+        
+        if view_type == "Frequency (Volume)":
+            pm4py.save_vis_dfg(dfg, start_act, end_act, "map.png")
         else:
-            gviz, start, end = pm4py.discover_dfg(df, case_id_key=case_col, activity_key=act_col, timestamp_key=time_col)
-            pm4py.save_vis_dfg(gviz, start, end, "map.png")
+            # Performance discovery requires the actual DFG as input
+            perf_dfg = pm4py.discover_performance_dfg(df, case_id_key=case_col, activity_key=act_col, timestamp_key=time_col)
+            pm4py.save_vis_performance_dfg(perf_dfg, start_act, end_act, "map.png")
+        
         st.image("map.png", use_container_width=True)
 
     with tab2:
-        st.subheader("Financial Impact of Inefficiency")
-        # Show which activities are repeated most (Rework)
-        rework_data = activity_counts[activity_counts['counts'] > 1][act_col].value_counts().reset_index()
-        fig_rework = px.bar(rework_data, x=act_col, y='count', title="Top Rework Activities", color_discrete_sequence=['#ff4b4b'])
-        st.plotly_chart(fig_rework, use_container_width=True)
-        st.info("💡 Rework in 'Claim Adjusting' is costing approximately $12k per month.")
+        st.subheader("Agent Performance Analysis")
+        # Social Mining: Who is handling the most claims and what is the claim value?
+        agent_stats = df.groupby('agent_name').agg({
+            case_col: 'nunique',
+            'claim_amount': 'sum'
+        }).reset_index().rename(columns={case_col: 'Cases Handled', 'claim_amount': 'Total Value'})
+        
+        fig_agents = px.scatter(agent_stats, x='Cases Handled', y='Total Value', 
+                                 text='agent_name', size='Total Value', color='Cases Handled',
+                                 title="Agent Productivity vs. Portfolio Value")
+        st.plotly_chart(fig_agents, use_container_width=True)
+        st.caption("Identify high-load agents who might become bottlenecks.")
 
     with tab3:
-        st.subheader("Individual Case Journey")
-        selected_case = st.selectbox("Select a Case ID to Audit:", df[case_col].unique()[:50])
-        case_history = df[df[case_col] == selected_case].sort_values(time_col)
-        st.table(case_history[[time_col, act_col, 'agent_name', 'claim_amount']])
+        st.subheader("Case Explorer")
+        search_case = st.selectbox("Search Case ID:", df[case_col].unique()[:20])
+        audit_trail = df[df[case_col] == search_case].sort_values(time_col)
+        st.dataframe(audit_trail[[time_col, act_col, 'agent_name', 'adjuster_name', 'claim_amount']], use_container_width=True)
 
 else:
-    st.error("Data missing. Please sync the /data folder.")
+    st.error(f"Missing CSV at {DATA_PATH}")
