@@ -2,7 +2,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 from pyvis.network import Network
 from engine.discovery import get_proprietary_dfg
-import os
+import json
 
 def render(df):
     st.header("🛣️ Process X-Ray: Execution Intelligence")
@@ -17,60 +17,62 @@ def render(df):
 
     plot_df = edges_df.sort_values("frequency", ascending=False).head(top_k)
 
-    # 1. Initialize PyVis Network
-    # 'directed=True' and high 'height' for visibility
-    net = Network(height="500px", width="100%", directed=True, bgcolor="#ffffff", font_color="#000000")
+    # 1. Initialize Network
+    net = Network(height="500px", width="100%", directed=True, bgcolor="#ffffff")
 
-    # 2. Add Nodes: White rectangles with black borders
-    unique_activities = df['activity_name'].unique()
-    for act in unique_activities:
+    # 2. Add Nodes: White Rectangles
+    for act in df['activity_name'].unique():
         net.add_node(
             act, 
             label=act, 
             shape="box", 
-            color={"background": "#FFFFFF", "border": "#000000"},
-            borderWidth=1,
-            font={"size": 14}
+            color={"background": "#FFFFFF", "border": "#000000", "highlight": "#F7A01B"},
+            font={"color": "#000000", "size": 14}
         )
 
-    # 3. Add Edges: Uniform width, describe order
+    # 3. Add Edges: Uniform Gray
     for _, row in plot_df.iterrows():
         net.add_edge(
-            row['activity_name'], 
-            row['next_activity'], 
+            str(row['activity_name']), 
+            str(row['next_activity']), 
             label=str(int(row['frequency'])),
             color="#999999",
             width=1
         )
 
-    # 4. Force Horizontal Hierarchical Layout
-    # This dictionary forces the "Serial" look (Left-to-Right)
+    # 4. JSON-Safe Configuration
+    # This forces the horizontal plane and enables the "focus" behavior
     options = {
         "layout": {
             "hierarchical": {
                 "enabled": True,
-                "levelSeparation": 250,
+                "levelSeparation": 300,
                 "nodeSpacing": 150,
-                "direction": "LR",  # Left to Right
+                "direction": "LR",
                 "sortMethod": "directed"
             }
         },
         "interaction": {
             "hover": True,
-            "navigationButtons": True,
-            "tooltipDelay": 100
+            "multiselect": True,
+            "navigationButtons": True
         },
-        "physics": {"enabled": False} # Prevents jitter and refresh
+        "nodes": {
+            "borderWidth": 1,
+            "borderWidthSelected": 2
+        },
+        "physics": {"enabled": False}
     }
-    net.set_options(f"""var options = {str(options)}""")
+    
+    # Use json.dumps to ensure JS-compatible double quotes
+    net.set_options(json.dumps(options))
 
-    # 5. Save and Render
-    # We save to a temporary HTML file and display it in Streamlit
-    try:
-        path = "tmp_graph.html"
-        net.save_graph(path)
-        with open(path, 'r', encoding='utf-8') as f:
-            html_data = f.read()
-        components.html(html_data, height=550)
-    except Exception as e:
-        st.error(f"Error generating graph: {e}")
+    # 5. Save and inject custom "Blur" CSS
+    path = "tmp_graph.html"
+    net.save_graph(path)
+    
+    with open(path, 'r', encoding='utf-8') as f:
+        html_data = f.read()
+    
+    # Optional: Display in Streamlit
+    components.html(html_data, height=550)
