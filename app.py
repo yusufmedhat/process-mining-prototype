@@ -36,19 +36,28 @@ if os.path.exists(DATA_PATH):
     tab1, tab2, tab3 = st.tabs(["🛣️ Process X-Ray", "👥 Social Mining", "🔍 Case Audit"])
 
     with tab1:
+        st.subheader("Interactive Process Discovery")
         view_type = st.radio("Map Metric:", ["Frequency (Volume)", "Performance (Duration)"], horizontal=True)
         
-        # FIX: Getting DFG, Start, and End activities properly for both modes
-        dfg, start_act, end_act = pm4py.discover_dfg(df, case_id_key=case_col, activity_key=act_col, timestamp_key=time_col)
-        
+        # 1. Discover the graph
         if view_type == "Frequency (Volume)":
-            pm4py.save_vis_dfg(dfg, start_act, end_act, "map.png")
+            # Frequency DFG
+            dfg, start_act, end_act = pm4py.discover_dfg(df, case_id_key=case_col, activity_key=act_col, timestamp_key=time_col)
+            # Convert to Graphviz object
+            gviz = pm4py.visualization.dfg.visualizer.apply(dfg, resource_id_key=None, parameters={
+                pm4py.visualization.dfg.visualizer.Variants.PERFORMANCE.value.Parameters.FORMAT: "dot"
+            })
         else:
-            # Performance discovery requires the actual DFG as input
+            # Performance DFG
             perf_dfg = pm4py.discover_performance_dfg(df, case_id_key=case_col, activity_key=act_col, timestamp_key=time_col)
-            pm4py.save_vis_performance_dfg(perf_dfg, start_act, end_act, "map.png")
+            gviz = pm4py.visualization.dfg.visualizer.apply(perf_dfg, variant=pm4py.visualization.dfg.visualizer.Variants.PERFORMANCE, parameters={
+                pm4py.visualization.dfg.visualizer.Variants.PERFORMANCE.value.Parameters.FORMAT: "dot"
+            })
         
-        st.image("map.png", use_container_width=True)
+        # 2. RENDER AS INTERACTIVE SVG (The "X-Ray" feel)
+        # This allows users to zoom and see the text clearly
+        st.graphviz_chart(gviz)
+        st.caption("💡 Use your mouse to scroll/zoom. Thicker lines indicate higher volume or longer delays.")
 
     with tab2:
         st.subheader("Agent Performance Analysis")
