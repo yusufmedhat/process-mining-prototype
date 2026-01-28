@@ -6,9 +6,8 @@ def render(df):
     st.header("🛣️ Process X-Ray: Execution Intelligence")
     
     with st.sidebar:
-        top_k = st.slider("Flow Complexity", 1, 50, 12)
+        top_k = st.slider("Flow Complexity", 1, 50, 10)
 
-    # 1. Get Flow Data
     edges_df = get_proprietary_dfg(df)
     if edges_df.empty:
         st.warning("No data found.")
@@ -16,53 +15,48 @@ def render(df):
 
     plot_df = edges_df.sort_values("frequency", ascending=False).head(top_k)
 
-    # 2. Nodes: Pure White, Black Border, Box Shape
-    unique_activities = df['activity_name'].unique()
-    nodes = [
-        Node(
+    # 1. Nodes: Rectangles, White Background, Black Border
+    nodes = []
+    for act in df['activity_name'].unique():
+        nodes.append(Node(
             id=act, 
             label=act, 
             shape="box",
             color="#FFFFFF",
-            font={'color': '#000000', 'size': 14, 'face': 'Arial'},
+            font={'color': '#000000', 'size': 12},
             borderWidth=1
-        ) 
-        for act in unique_activities
-    ]
+        ))
 
-    # 3. Edges: Uniform Gray Lines
-    edges = [
-        Edge(
+    # 2. Edges: Uniform thickness (no noise), describing order
+    edges = []
+    for _, row in plot_df.iterrows():
+        edges.append(Edge(
             source=row['activity_name'], 
             target=row['next_activity'], 
-            label=str(int(row['frequency'])),
+            label=f"{int(row['frequency'])}",
             color="#999999",
-            width=1
-        ) 
-        for _, row in plot_df.iterrows()
-    ]
+            width=1 # Uniform width as requested
+        ))
 
-    # 4. Strict Horizontal Hierarchical Config
-    # We use a nested dictionary for hierarchical to ensure the 'LR' command is respected.
+    # 3. CONFIG: This is what forces the Horizontal Plane
     config = Config(
         width=1200,
         height=400,
         directed=True,
-        physics=False,  # Essential to stop the refresh-on-zoom
         nodeHighlightBehavior=True,
         highlightDegree=1,
         linkHighlightBehavior=True,
-        hierarchical={
-            "enabled": True,
-            "levelSeparation": 250, # Space between steps
-            "nodeSpacing": 100,      # Space between parallel steps
-            "direction": "LR",       # Forced Left-to-Right
-            "sortMethod": "directed" # Orders by process flow
-        }
+        physics=False, # STOP REFRESH: Locks nodes in place
+        hierarchical=True,
+        direction="LR", # LEFT TO RIGHT
+        sortMethod="directed",
+        levelSeparation=300, # Increases horizontal space
+        nodeSpacing=150      # Increases vertical gap between parallel steps
     )
 
-    # 5. Render
+    # 4. Render
     try:
-        agraph(nodes=nodes, edges=edges, config=config)
+        # We use a static key to ensure Streamlit doesn't refresh the state on zoom
+        agraph(nodes=nodes, edges=edges, config=config, key="process_mining_stable")
     except Exception:
-        st.error("Visualization error. Try reducing 'Flow Complexity' in the sidebar.")
+        st.error("Visualization error. Please refresh the page.")
