@@ -21,9 +21,9 @@ if os.path.exists(DATA_PATH):
     # --- SIDEBAR: CELONIS CONTROLS ---
     st.sidebar.header("🕹️ Control Tower")
     
-    # Complexity Slider: Filters out rare paths
-    perc_activities = st.sidebar.slider("Activity Coverage (%)", 0, 100, 80)
-    perc_paths = st.sidebar.slider("Path Coverage (%)", 0, 100, 50)
+    # Path Filtering: This is how we simplify the "Spaghetti"
+    # We filter by the Top K most frequent variants
+    top_k = st.sidebar.slider("Process Path Coverage (Top Variants)", 1, 100, 20)
     
     view_type = st.sidebar.radio("Map Metric:", ["Frequency (Volume)", "Performance (Duration)"])
 
@@ -32,7 +32,7 @@ if os.path.exists(DATA_PATH):
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Cases", f"{total_cases:,}")
     col2.metric("Avg Claim", f"${df['claim_amount'].mean():,.0f}")
-    col3.metric("Standardization", "74%", "+2%")
+    col3.metric("Standardization", f"{(top_k/100)*100:.0f}%", "Target: 80%")
 
     # --- MAIN TABS ---
     tab1, tab2, tab3 = st.tabs(["🛣️ Process X-Ray", "👥 Social Mining", "🔍 Case Audit"])
@@ -40,8 +40,8 @@ if os.path.exists(DATA_PATH):
     with tab1:
         st.subheader(f"Dynamic {view_type} Map")
         
-        # Applying the Complexity Filter (The 'Celonis' way to handle spaghetti)
-        filtered_log = pm4py.filter_activities_retained_percentage(df, perc_activities/100, case_id_key=case_col, activity_key=act_col, timestamp_key=time_col)
+        # STABLE FILTERING: Filter to the Top K variants to simplify the map
+        filtered_log = pm4py.filter_variants_top_k(df, top_k, case_id_key=case_col, activity_key=act_col, timestamp_key=time_col)
         
         if view_type == "Frequency (Volume)":
             dfg, start_act, end_act = pm4py.discover_dfg(filtered_log, case_id_key=case_col, activity_key=act_col, timestamp_key=time_col)
@@ -52,12 +52,13 @@ if os.path.exists(DATA_PATH):
         
         # Interactive SVG Rendering
         st.graphviz_chart(gviz)
-        st.caption("🔍 Scroll to zoom. Use the sidebar sliders to simplify the process map.")
+        st.caption(f"🔍 Currently showing the top {top_k} process variants. Increase the slider to see more exceptions.")
 
     with tab2:
         st.subheader("Agent Productivity")
         agent_stats = df.groupby('agent_name').agg({case_col: 'nunique', 'claim_amount': 'sum'}).reset_index()
-        fig = px.scatter(agent_stats, x=case_col, y='claim_amount', text='agent_name', size='claim_amount', color=case_col)
+        fig = px.scatter(agent_stats, x=case_col, y='claim_amount', text='agent_name', size='claim_amount', color=case_col,
+                         labels={case_col: "Number of Claims", "claim_amount": "Total Portfolio Value ($)"})
         st.plotly_chart(fig, use_container_width=True)
 
     with tab3:
