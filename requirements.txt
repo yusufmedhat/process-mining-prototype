@@ -1,6 +1,6 @@
-polars
-pandas
 streamlit
+pandas
+polars
 pm4py
-st-link-analysis
 plotly
+pyarrow  # Required for Parquet files
