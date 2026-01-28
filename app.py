@@ -79,9 +79,16 @@ if os.path.exists(DATA_PATH):
 
     with col_a:
         st.subheader("🔄 Process Variants")
-        # This shows how many different paths cases take
+        # Get variants using the latest pm4py method
         variants = pm4py.get_variants(filtered_df, case_id_key=case_col, activity_key=act_col, timestamp_key=time_col)
-        variants_list = [{"Variant Path": " -> ".join(list(k)), "Count": len(v)} for k, v in variants.items()]
+        
+        # Safer way to build the list regardless of pm4py version
+        variants_list = []
+        for path, cases in variants.items():
+            # path is a tuple of activities, cases is the list of case IDs
+            path_str = " → ".join(path)
+            variants_list.append({"Variant Path": path_str, "Count": len(cases)})
+        
         variants_df = pd.DataFrame(variants_list).sort_values(by="Count", ascending=False).head(5)
         st.dataframe(variants_df, use_container_width=True)
         st.caption("Top 5 sequences of activities by volume.")
