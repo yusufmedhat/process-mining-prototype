@@ -24,8 +24,12 @@ def render(df):
             target = str(row['next_activity'])
             freq = int(row['frequency'])
             
-            # This creates the actual arrows with labels
-            dot += f'  "{source}" -> "{target}" [label="{freq} cases", penwidth={max(1, freq/500)}];\n'
+            # --- IMPROVED SCALING LOGIC ---
+            # This caps the thickness at 5 and ensures it doesn't get "disgusting"
+            scaled_width = min(5, max(1, freq / 100)) 
+            
+            # Add the connection with a thinner, cleaner arrow
+            dot += f'  "{source}" -> "{target}" [label="{freq}", penwidth={scaled_width}, color="#444444", fontname="Arial"];\n'
         
         dot += "}"
 
