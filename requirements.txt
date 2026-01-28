@@ -1,5 +1,6 @@
-streamlit
+polars
 pandas
+streamlit
 pm4py
+st-link-analysis
 plotly
-graphviz
