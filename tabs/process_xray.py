@@ -1,39 +1,37 @@
 import streamlit as st
-from st_link_analysis import st_link_analysis  # <--- THIS IS THE MISSING LINE
 from engine.discovery import get_proprietary_dfg
 
 def render(df):
     st.header("🛣️ Process X-Ray: Execution Intelligence")
     
-    # 1. SIDEBAR CONTROLS
     with st.sidebar:
         st.subheader("Map Fine-Tuning")
-        top_k = st.slider("Variant Coverage (%)", 1, 100, 20)
+        top_k = st.slider("Flow Complexity", 1, 50, 15)
 
-    # 2. RUN PROPRIETARY ENGINE
-    # This calls your Polars-based logic from engine/discovery.py
+    # 1. Get the Flow Data
     edges_df = get_proprietary_dfg(df)
     
     if not edges_df.empty:
-        # Prepare Interactive Graph Data
-        # We limit the edges based on the top_k slider for performance
-        limit = int(len(edges_df) * (top_k / 100))
-        plot_df = edges_df.head(limit)
+        # Sort by most frequent paths
+        plot_df = edges_df.sort_values("frequency", ascending=False).head(top_k)
 
-        nodes = [{"data": {"id": act, "label": act}} for act in df['activity_name'].unique()]
-        edges = [
-            {
-                "data": {
-                    "source": row['activity_name'], 
-                    "target": row['next_activity'], 
-                    "label": f"{int(row['frequency'])} hits"
-                }
-            }
-            for _, row in plot_df.iterrows()
-        ]
+        # 2. Build a clear DOT Graph (Left-to-Right Flow)
+        dot = "digraph {\n"
+        dot += '  rankdir=LR; node [shape=rect, style="rounded,filled", fillcolor="#E1F5FE", fontname="Arial"];\n'
         
-        # 3. RENDER INTERACTIVE MAP
-        st.subheader("Interactive Process Twin")
-        st_link_analysis({"nodes": nodes, "edges": edges}, layout="cola")
+        for _, row in plot_df.iterrows():
+            source = str(row['activity_name'])
+            target = str(row['next_activity'])
+            freq = int(row['frequency'])
+            
+            # This creates the actual arrows with labels
+            dot += f'  "{source}" -> "{target}" [label="{freq} cases", penwidth={max(1, freq/500)}];\n'
+        
+        dot += "}"
+
+        # 3. Render the Process Map
+        st.subheader("Enterprise Process Flow")
+        st.graphviz_chart(dot)
+        
     else:
-        st.warning("No process paths found for the current selection.")
+        st.warning("⚠️ The Engine could not find any process connections. Check your data columns.")
