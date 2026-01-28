@@ -8,6 +8,7 @@ def render(df):
     with st.sidebar:
         top_k = st.slider("Flow Complexity", 1, 50, 12)
 
+    # 1. Get Flow Data
     edges_df = get_proprietary_dfg(df)
     if edges_df.empty:
         st.warning("No data found.")
@@ -15,49 +16,53 @@ def render(df):
 
     plot_df = edges_df.sort_values("frequency", ascending=False).head(top_k)
 
-    # 1. CLEAN NODES: White, Black Border, Rectangles
-    nodes = []
-    for act in df['activity_name'].unique():
-        nodes.append(Node(
+    # 2. Nodes: Pure White, Black Border, Box Shape
+    unique_activities = df['activity_name'].unique()
+    nodes = [
+        Node(
             id=act, 
             label=act, 
             shape="box",
-            color="#FFFFFF", # White background
-            borderWidth=1,   # Thin black border (default is black)
-            font={'color': '#000000'}
-        ))
+            color="#FFFFFF",
+            font={'color': '#000000', 'size': 14, 'face': 'Arial'},
+            borderWidth=1
+        ) 
+        for act in unique_activities
+    ]
 
-    # 2. CLEAN EDGES: Uniform width, grey color
-    edges = []
-    for _, row in plot_df.iterrows():
-        edges.append(Edge(
+    # 3. Edges: Uniform Gray Lines
+    edges = [
+        Edge(
             source=row['activity_name'], 
             target=row['next_activity'], 
             label=str(int(row['frequency'])),
             color="#999999",
             width=1
-        ))
+        ) 
+        for _, row in plot_df.iterrows()
+    ]
 
-    # 3. STABLE HIERARCHICAL CONFIG
-    # We remove 'staticGraph' and 'physics' conflicts to stop the TypeError
+    # 4. Strict Horizontal Hierarchical Config
+    # We use a nested dictionary for hierarchical to ensure the 'LR' command is respected.
     config = Config(
-        width=1000,
+        width=1200,
         height=400,
         directed=True,
-        hierarchical=True,
-        direction="LR",      # Left to Right
+        physics=False,  # Essential to stop the refresh-on-zoom
         nodeHighlightBehavior=True,
         highlightDegree=1,
         linkHighlightBehavior=True,
-        highlightColor="#F7A01B",
-        physics=False        # Essential to stop the zoom-refresh loop
+        hierarchical={
+            "enabled": True,
+            "levelSeparation": 250, # Space between steps
+            "nodeSpacing": 100,      # Space between parallel steps
+            "direction": "LR",       # Forced Left-to-Right
+            "sortMethod": "directed" # Orders by process flow
+        }
     )
 
-    # 4. RENDER
-    # If the key "serial_process_map" still causes a TypeError, 
-    # remove it and let Streamlit handle the ID automatically.
+    # 5. Render
     try:
         agraph(nodes=nodes, edges=edges, config=config)
-    except Exception as e:
-        st.error("Visualization Component Error. Checking data types...")
-        st.write("Ensuring all IDs are strings:", [type(n.id) for n in nodes])
+    except Exception:
+        st.error("Visualization error. Try reducing 'Flow Complexity' in the sidebar.")
