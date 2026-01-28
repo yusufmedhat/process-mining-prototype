@@ -4,3 +4,4 @@ polars
 pm4py
 plotly
 pyarrow  # Required for Parquet files
+st-link-analysis
